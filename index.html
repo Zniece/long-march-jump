@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#8f1d1d">
+<title>长征跳一跳 · Long March Jump</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <span class="hud-chip" id="morale">士气 ♥♥♥</span>
+  <span class="hud-chip" id="score">星火 0</span>
+  <div id="progressWrap"><div id="progressBar"></div></div>
+</div>
+
+<!-- 开场页 -->
+<div id="introOverlay">
+  <div class="intro-card">
+    <div class="intro-eyebrow">实践作业 · 网页小游戏</div>
+    <h1 class="intro-title">长征跳一跳</h1>
+    <div class="intro-banner">纪念红军长征胜利九十周年</div>
+    <p class="intro-sub">
+      1934—1936，红军战士纵横二万五千里。<br>
+      现在，请沿着瑞金到会宁的路线逐站跳行，<br>
+      在红旗问答里重温这段伟大的远征。
+    </p>
+    <button class="intro-btn" id="introStart">出发 · 从瑞金开始</button>
+    <div class="intro-hint">按住蓄力，松开起跳 · 红星方块是问答点</div>
+    <!-- 角落：作业信息（仅开场页可见） -->
+    <button id="creditBtn" title="作业信息">i</button>
+    <div id="creditPanel" hidden>
+      杭州电子科技大学《中国近现代史纲要》2026-2027-1 实践作业<br>学号：26061832
+    </div>
+  </div>
+</div>
+
+<!-- 问答弹窗 -->
+<div id="quizOverlay" hidden>
+  <div class="quiz-card" id="quizCard">
+    <div class="quiz-tag" id="quizTag">红旗问答</div>
+    <div class="quiz-q" id="quizQ"></div>
+    <div class="quiz-opts" id="quizOpts"></div>
+    <div class="quiz-exp" id="quizExp"></div>
+    <button class="quiz-next" id="quizNext">继续赶路</button>
+  </div>
+</div>
+
+<!-- 结算弹窗 -->
+<div id="overOverlay" hidden>
+  <div class="over-card">
+    <div class="over-title" id="overTitle"></div>
+    <div class="over-sub" id="overSub"></div>
+    <div class="over-stats" id="overStats"></div>
+    <button class="over-btn" id="overRestart">重新出发</button>
+  </div>
+</div>
+
+<script src="data/questions.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
