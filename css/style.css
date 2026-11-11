@@ -122,7 +122,7 @@ body{
 .quiz-opt:hover{border-color:var(--red-800);}
 .quiz-opt.correct{background:#e8f2eb; border-color:#256b4a; color:#256b4a;}
 .quiz-opt.wrong{background:#f4e4df; border-color:var(--red-800); color:var(--red-800);}
-.quiz-exp{display:none; margin-top:14px; font-size:13px; line-height:1.6; color:#6f6057;}
+.quiz-exp{display:none; margin-top:14px; font-size:13px; line-height:1.6; color:#6f6057; white-space:pre-line;}
 .quiz-next{
   display:none; margin-top:16px; width:100%; padding:12px;
   border:none; border-radius:8px; font-weight:700; color:#fff9f1;

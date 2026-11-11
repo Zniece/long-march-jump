@@ -35,7 +35,7 @@
 
   /* ---------- 状态 ---------- */
   var W, H, dpr;
-  var blocks = [];            // {gx,gy,q(question?),milestone,label}
+  var blocks = [];            // {gx,gy,q,isQuiz,stage,stop,milestone}
   var cur = 0;                // 当前所在方块索引
   var player = { x: 0, y: 0, sx: 0, sy: 0, jumpFrom: null, jumpT: 0 };
   var state = "intro";        // intro | ready | charging | jumping | quiz | over
@@ -83,7 +83,7 @@
       var isQuiz = isStop && i > 0 && i < TOTAL_BLOCKS - 1;
       blocks.push({
         gx: gx, gy: gy,
-        q: isQuiz ? null : null,   // 题目落地时再按地点抽取
+        q: null,                   // 题目在 buildRoute 末尾按地点抽取
         isQuiz: isQuiz,
         stage: isStop ? STOPS[stopIdx].stage : null,
         stop: isStop ? stopIdx : -1,
@@ -114,7 +114,6 @@
     cur = 0; state = "ready"; particles = [];
     buildRoute();
     var p = blockScreen(blocks[0]);
-    player.gx = blocks[0].gx; player.gy = blocks[0].gy;
     player.x = p.x; player.y = p.y;
     player.sx = p.x; player.sy = p.y;
     cam.x = 0; cam.y = 0; updateCam(true); updateHud();
@@ -159,6 +158,7 @@
     if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") pressEnd(e);
   });
   document.getElementById("overRestart").addEventListener("click", function () {
+    this.blur();
     document.getElementById("overOverlay").hidden = true; reset();
   });
 
@@ -166,7 +166,6 @@
   function doJump(power) {
     var next = blocks[cur + 1];
     if (!next) return;
-    var from = blockScreen(blocks[cur]);
     // 预设落点判定：本块到下一块的"格距离"为 1（等轴平面上欧氏距离/GRID）
     var d = power * MAX_JUMP;                    // 本次跳跃的格数
     var dist = 1;                                // 目标落点距离
@@ -178,16 +177,13 @@
       success = true;
       land = blockScreen(next);
       if (Math.abs(d - dist) <= PERFECT) score += 3; // 正中核心
-      player.gx = next.gx; player.gy = next.gy;
     } else {
       success = false;
       // 跳到方块外：沿"当前块 → 下一块"的实际方向飞出并下坠
-      // （不再依赖交替方向的约定，避免判定轴写反导致跳空方向错误）
       var fromB = blockScreen(blocks[cur]), toB = blockScreen(next);
       var ang = Math.atan2(toB.y - fromB.y, toB.x - fromB.x);
-      var px = Math.min(d, MAX_JUMP) * GRID;
-      land = { x: player.x + Math.cos(ang) * px, y: player.y + Math.sin(ang) * px };
-      player.fallOff = true;
+      var fly = Math.min(d, MAX_JUMP) * GRID;
+      land = { x: player.x + Math.cos(ang) * fly, y: player.y + Math.sin(ang) * fly };
     }
     player.jumpTo = land;
     player.success = success;
@@ -202,44 +198,42 @@
       cur = player.nextIdx;
       score += 1;
       var b = blocks[cur];
-      if (b.q) { state = "quiz"; openQuiz(b, cur); }
-      else if (cur === TOTAL_BLOCKS - 1) { endGame(true); }
+      if (b.q) { state = "quiz"; openQuiz(b); }
+      else if (cur === TOTAL_BLOCKS - 1) { endGame(); }
       else state = "ready";
     } else {
-      player.fallOff = false;
       morale--; shakeT = 300;
       updateHud();
       // 长征没有失败：跳空不终结游戏，落回下一格继续赶路
-      // 教育向宽容：失败后落回下一格继续
       var next = blocks[player.nextIdx];
       var p = blockScreen(next);
-      player.gx = next.gx; player.gy = next.gy;
       player.x = p.x; player.y = p.y;
       player.sx = p.x; player.sy = p.y;
       cur = player.nextIdx;
       // 落回的格子如果是问答块，同样要触发问答（之前漏掉导致问答被跳过）
-      if (cur === TOTAL_BLOCKS - 1) { state = endGameWrap(); }
-      else if (blocks[cur].q) { state = "quiz"; openQuiz(blocks[cur], cur); }
+      if (cur === TOTAL_BLOCKS - 1) { endGame(); }
+      else if (blocks[cur].q) { state = "quiz"; openQuiz(blocks[cur]); }
       else state = "ready";
     }
     updateCam(false); updateHud();
   }
-  function endGameWrap() { endGame(true); return "over"; }
 
   /* ---------- 问答 ---------- */
   var quizOverlay = document.getElementById("quizOverlay");
   var quizCard = document.getElementById("quizCard");
 
-  function openQuiz(block, blockIdx) {
+  function openQuiz(block) {
     var q = block.q;
     quizQ = q;
     var opts = shuffle(q.opts.map(function (t, i) { return { t: t, i: i }; }));
     var box = document.getElementById("quizOpts");
     box.innerHTML = "";
+    var correctBtn = null;
     opts.forEach(function (o) {
       var btn = document.createElement("button");
       btn.className = "quiz-opt";
       btn.textContent = o.t;
+      if (o.i === q.a) correctBtn = btn;   // 记住正确项按钮，避免按文字匹配
       btn.onclick = function () { answer(o.i, btn); };
       box.appendChild(btn);
     });
@@ -248,7 +242,8 @@
     document.getElementById("quizTag").textContent =
       "红旗问答 · " + (stop ? stop.sub : "行军途中");
     document.getElementById("quizQ").textContent = q.q;
-    document.getElementById("quizExp").textContent = "📖 " + q.exp;
+    document.getElementById("quizExp").textContent =
+      "📖 " + q.exp + (q.spirit ? "\n✦ 长征精神：" + q.spirit : "");
     quizCard.classList.remove("revealed");
     quizOverlay.hidden = false;
   }
@@ -265,28 +260,25 @@
     } else {
       btn.classList.add("wrong");
       morale--; shakeT = 250;
-      buttons.forEach(function (b) {
-        if (b.textContent === quizQ.opts[quizQ.a]) b.classList.add("correct");
-      });
+      if (correctBtn) correctBtn.classList.add("correct");
     }
     quizCard.classList.add("revealed");
     updateHud();
   }
 
   document.getElementById("quizNext").onclick = function () {
+    this.blur();
     quizOverlay.hidden = true;
-    if (cur === TOTAL_BLOCKS - 1) { endGame(true); return; }
+    if (cur === TOTAL_BLOCKS - 1) { endGame(); return; }
     state = "ready";
   };
 
   /* ---------- 结算（长征没有失败，只有会师） ---------- */
-  function endGame(win) {
+  function endGame() {
     state = "over";
-    var title = document.getElementById("overTitle");
-    var sub = document.getElementById("overSub");
-    title.textContent = "会宁会师 · 长征胜利！";
-    sub.textContent = "二万五千里走完，红旗问答也算交上了一份答卷。"
-      + (morale < 100 ? "这一路摔过跤、答错过，但每一步都算数。" : "");
+    document.getElementById("overTitle").textContent = "会宁会师 · 长征胜利！";
+    document.getElementById("overSub").textContent = "二万五千里走完，红旗问答也算交上了一份答卷。"
+      + (morale < MORALE_MAX ? "这一路摔过跤、答错过，但每一步都算数。" : "");
     document.getElementById("overStats").textContent =
       "士气 " + morale + " ｜ 星火 " + score + " ｜ 问答 " + correct + "/" + answered + " 正确";
     document.getElementById("overOverlay").hidden = false;
@@ -342,11 +334,10 @@
     if (b.q) { drawStar(p.x, p.y - hgt - 16 + s * ISO * 0.5, 9, "#f4e4df"); }
     // 里程碑
     if (b.milestone) {
-      ctx.fillStyle = "#6f6057"; ctx.font = "bold 12px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillStyle = "#6f6057"; ctx.font = "bold 12px " + FONT;
       ctx.textAlign = "center";
       ctx.fillText(b.milestone, p.x, p.y + 34);
     }
-    return { hgt: hgt, topY: p.y - hgt };
   }
 
   function drawStar(cx, cy, r, color) {
@@ -391,11 +382,17 @@
     player.squash = 1 + p * 0.28;
   }
 
+  var FONT = getComputedStyle(document.body).fontFamily;   // 缓存字体，避免每帧查询
+
+  var lastT = 0;
   function frame(now) {
     requestAnimationFrame(frame);
+    // 帧间隔（首帧或后台切回时钳制，避免大跳变）
+    var dt = Math.min(lastT ? now - lastT : 16.7, 100);
+    lastT = now;
     // 更新
     if (state === "jumping") {
-      player.jumpT += 16.7;
+      player.jumpT += dt;
       var t = Math.min(player.jumpT / flightDur, 1);
       var f = player.jumpFrom, to = player.jumpTo;
       var arc = Math.sin(t * Math.PI) * 90;
@@ -409,7 +406,7 @@
     updateCam(false);
     particles.forEach(function (pt) { pt.x += pt.vx; pt.y += pt.vy; pt.vy += 0.3; pt.life -= 0.02; });
     particles = particles.filter(function (pt) { return pt.life > 0; });
-    if (shakeT > 0) shakeT -= 16.7;
+    if (shakeT > 0) shakeT -= dt;
 
     // 绘制
     ctx.clearRect(0, 0, W, H);
@@ -419,13 +416,12 @@
 
     // 远景水印：纪念主题
     ctx.fillStyle = "rgba(143,29,29,.08)";
-    ctx.font = "900 40px " + getComputedStyle(document.body).fontFamily;
+    ctx.font = "900 40px " + FONT;
     ctx.textAlign = "center";
     ctx.fillText("纪念红军长征胜利九十周年", blockScreen(blocks[0]).x + W * 0.1, blockScreen(blocks[0]).y - 150);
 
     for (var i = 0; i < blocks.length; i++) {
-      var info = drawBlock(blocks[i], i === cur);
-      if (i === cur) player.blockTop = info.topY;
+      drawBlock(blocks[i], i === cur);
     }
     if (state !== "jumping") {
       var sq = player.squash || 1;
@@ -448,7 +444,7 @@
 
     if (state === "ready") {
       ctx.fillStyle = "rgba(45,33,28,.5)";
-      ctx.font = "bold 15px " + getComputedStyle(document.body).fontFamily;
+      ctx.font = "bold 15px " + FONT;
       ctx.textAlign = "center";
       ctx.fillText("按住蓄力 · 松开起跳", W / 2, H - 40);
     }
@@ -471,6 +467,7 @@
 
   /* ---------- 启动 ---------- */
   document.getElementById("introStart").addEventListener("click", function () {
+    this.blur();
     introOverlay.hidden = true;
     creditBtn.style.display = "none";
     creditPanel.hidden = true;
