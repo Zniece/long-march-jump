@@ -45,6 +45,7 @@
   var quizCorrectBtn = null;   // 当前题的正确项按钮（answer 中高亮用）
   var cam = { x: 0, y: 0 };   // 相机偏移（像素）
   var shakeT = 0;
+  var flashT = 0, flashDur = 0, flashColor = "255,255,255";   // 屏幕闪烁反馈
   var particles = [];
   var flightDur = 380;
 
@@ -99,13 +100,36 @@
     });
   }
 
-  // 按地点选题：优先该地点未用过的题，否则任意未用过的题，再兜底任意题
+  // 按地点选题，带跨局记忆（localStorage）：
+  // 优先级：本站未出 & 近期未出 > 全局未出 & 近期未出 > 本站未出 > 全局未出 > 兜底
+  var RECENT_KEY = "lmj_recent_questions";
+  var RECENT_CAP = 18;   // 记忆最近 18 题（约两局量），越旧的越可能重新出现
+
+  function loadRecent() {
+    try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; }
+    catch (e) { return []; }
+  }
+  function saveRecent(list) {
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(-RECENT_CAP))); } catch (e) {}
+  }
+
   function pickQuestion(stage, used) {
     var all = window.QUESTIONS;
-    var pool = all.filter(function (q) { return q.stage === stage && !used[q.q]; });
-    if (!pool.length) pool = all.filter(function (q) { return !used[q.q]; });
-    if (!pool.length) pool = all;
-    var q = pool[Math.floor(Math.random() * pool.length)];
+    var recent = {};
+    loadRecent().forEach(function (t) { recent[t] = true; });
+    function sel(pool) {
+      if (!pool.length) return null;
+      var q = pool[Math.floor(Math.random() * pool.length)];
+      var rec = loadRecent();
+      rec.push(q.q); saveRecent(rec);
+      return q;
+    }
+    var q =
+      sel(all.filter(function (x) { return x.stage === stage && !used[x.q] && !recent[x.q]; })) ||
+      sel(all.filter(function (x) { return !used[x.q] && !recent[x.q]; })) ||
+      sel(all.filter(function (x) { return x.stage === stage && !used[x.q]; })) ||
+      sel(all.filter(function (x) { return !used[x.q]; })) ||
+      sel(all);
     used[q.q] = true;
     return q;
   }
@@ -192,6 +216,8 @@
     state = "jumping";
   }
 
+  function flash(color, dur) { flashColor = color; flashDur = flashT = dur; }
+
   function finishJump() {
     if (player.success) {
       player.x = player.jumpTo.x; player.y = player.jumpTo.y;
@@ -204,6 +230,7 @@
       else state = "ready";
     } else {
       morale--; shakeT = 300;
+      flash("143,29,29", 260);   // 跳空反馈：红色闪光
       updateHud();
       // 长征没有失败：跳空不终结游戏，落回下一格继续赶路
       var next = blocks[player.nextIdx];
@@ -261,6 +288,7 @@
     } else {
       btn.classList.add("wrong");
       morale--; shakeT = 250;
+      flash("143,29,29", 220);   // 答错反馈：红色闪光
       if (quizCorrectBtn) quizCorrectBtn.classList.add("correct");
     }
     quizCard.classList.add("revealed");
@@ -408,6 +436,7 @@
     particles.forEach(function (pt) { pt.x += pt.vx; pt.y += pt.vy; pt.vy += 0.3; pt.life -= 0.02; });
     particles = particles.filter(function (pt) { return pt.life > 0; });
     if (shakeT > 0) shakeT -= dt;
+    if (flashT > 0) flashT -= dt;
 
     // 绘制
     ctx.clearRect(0, 0, W, H);
@@ -442,6 +471,12 @@
     });
     ctx.globalAlpha = 1;
     ctx.restore();
+
+    // 屏幕闪烁反馈（全屏覆盖，屏幕坐标系，不受相机影响）
+    if (flashT > 0) {
+      ctx.fillStyle = "rgba(" + flashColor + "," + (flashT / flashDur * 0.22).toFixed(3) + ")";
+      ctx.fillRect(0, 0, W, H);
+    }
 
     if (state === "ready") {
       ctx.fillStyle = "rgba(45,33,28,.5)";
