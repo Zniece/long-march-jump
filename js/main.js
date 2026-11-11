@@ -42,6 +42,7 @@
   var chargeStart = 0;
   var morale = MORALE_MAX, score = 0, answered = 0, correct = 0;
   var quizQ = null;
+  var quizCorrectBtn = null;   // 当前题的正确项按钮（answer 中高亮用）
   var cam = { x: 0, y: 0 };   // 相机偏移（像素）
   var shakeT = 0;
   var particles = [];
@@ -228,12 +229,12 @@
     var opts = shuffle(q.opts.map(function (t, i) { return { t: t, i: i }; }));
     var box = document.getElementById("quizOpts");
     box.innerHTML = "";
-    var correctBtn = null;
+    quizCorrectBtn = null;
     opts.forEach(function (o) {
       var btn = document.createElement("button");
       btn.className = "quiz-opt";
       btn.textContent = o.t;
-      if (o.i === q.a) correctBtn = btn;   // 记住正确项按钮，避免按文字匹配
+      if (o.i === q.a) quizCorrectBtn = btn;   // 记住正确项按钮，避免按文字匹配
       btn.onclick = function () { answer(o.i, btn); };
       box.appendChild(btn);
     });
@@ -260,7 +261,7 @@
     } else {
       btn.classList.add("wrong");
       morale--; shakeT = 250;
-      if (correctBtn) correctBtn.classList.add("correct");
+      if (quizCorrectBtn) quizCorrectBtn.classList.add("correct");
     }
     quizCard.classList.add("revealed");
     updateHud();
